@@ -197,6 +197,9 @@ do
       # winlator patches
       "common/dlls_amd_ags_x64_unixlib_c.patch"
 
+      # shell32 file operation patches (fix crash copying to a drive root e.g. "C:")
+      "common/dlls_shell32_shlfileop_c.patch"
+
       # shortcut patch
       "common/programs_winemenubuilder_winemenubuilder_c.patch"
 

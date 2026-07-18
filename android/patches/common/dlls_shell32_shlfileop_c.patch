@@ -1,0 +1,24 @@
+diff --git a/dlls/shell32/shlfileop.c b/dlls/shell32/shlfileop.c
+index f24c7b7df23..7db00bf894c 100644
+--- a/dlls/shell32/shlfileop.c
++++ b/dlls/shell32/shlfileop.c
+@@ -963,6 +963,19 @@ static void file_entry_init(FILE_ENTRY *file_entry,
+         file_entry->szFilename = malloc(file_name_len * sizeof(WCHAR));
+         lstrcpyW(file_entry->szFilename, ptr + 1); /* Skip over backslash. */
+     }
++    else
++    {
++        /* No backslash (e.g. a bare drive root like "C:"): treat the whole
++           path as the directory with an empty file name. Otherwise szDirectory
++           and szFilename stay NULL and do_copy() dereferences them (crash when
++           copying to a drive root, as Winlator does). */
++        file_name_len = wcslen(file_name) + 1;
++        file_entry->szDirectory = malloc(file_name_len * sizeof(WCHAR));
++        lstrcpyW(file_entry->szDirectory, file_name);
++
++        file_entry->szFilename = malloc(sizeof(WCHAR));
++        file_entry->szFilename[0] = 0;
++    }
+ 
+     file_entry->attributes = attributes;
+     file_entry->bFromWildcard = from_wildcard;
