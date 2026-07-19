@@ -27,10 +27,9 @@ export PKG_CONFIG_LIBDIR=$deps/lib/pkgconfig:$deps/share/pkgconfig
 export ACLOCAL_PATH=$deps/lib/aclocal:$deps/share/aclocal
 export CPPFLAGS="-I$deps/include --sysroot=$TOOLCHAIN/../sysroot"
 
-export C_OPTS="-g0 -O2 -Wno-declaration-after-statement -Wno-implicit-function-declaration -Wno-int-conversion"
+export C_OPTS="-Wno-declaration-after-statement -Wno-implicit-function-declaration -Wno-int-conversion"
 export CFLAGS=$C_OPTS
 export CXXFLAGS=$C_OPTS
-export CROSSCFLAGS="-g0 -O2"
 export LDFLAGS="-L$deps/lib -Wl,-rpath=$RUNTIME_PATH/lib"
 
 export FREETYPE_CFLAGS="-I$deps/include/freetype2"
@@ -297,15 +296,5 @@ do
     cp -r $install_dir/bin/notepad $OUTPUT_DIR/bin
     cp -r $install_dir/lib/wine  $OUTPUT_DIR/lib
     cp -r $install_dir/share/wine  $OUTPUT_DIR/share
-
-    echo "Stripping binaries with llvm-strip to shrink the tree..."
-    before_mb=$(du -sm "$OUTPUT_DIR" 2>/dev/null | cut -f1)
-    find "$OUTPUT_DIR/lib" "$OUTPUT_DIR/bin" -type f \
-      \( -name '*.dll' -o -name '*.exe' -o -name '*.drv' -o -name '*.so' -o -name 'wine' -o -name 'wine-preloader' \) \
-      -print0 2>/dev/null | while IFS= read -r -d '' f; do
-        "$STRIP" --strip-all "$f" 2>/dev/null || "$STRIP" --strip-debug "$f" 2>/dev/null || true
-      done
-    after_mb=$(du -sm "$OUTPUT_DIR" 2>/dev/null | cut -f1)
-    echo "OUTPUT tree: ${before_mb}MB -> ${after_mb}MB after strip."
   fi
 done
