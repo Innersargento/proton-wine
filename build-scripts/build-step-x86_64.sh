@@ -133,7 +133,7 @@ do
       --without-vosk \
       --with-vulkan \
       --without-wayland \
-      --without-xcomposite \
+      --with-xcomposite \
       --without-xfixes \
       --without-xinerama \
       --without-xrandr \
