@@ -225,6 +225,11 @@ do
       "arm64ec/dlls_wdscore_wdscore_spec.patch"
       "arm64ec/programs_wineboot_wineboot_c.patch"
 
+      # use the x86_64 gecko/mono addons on aarch64 PE modules
+      "arm64ec/dlls_appwiz_cpl_addons_c.patch"
+      "arm64ec/dlls_mscoree_metahost_c.patch"
+      "arm64ec/dlls_mshtml_nsembed_c.patch"
+
       # 1. Extended State (XSTATE/YMM) Support Patches
       "test-bylaws/dlls_ntdll_unwind_h.patch"
       "test-bylaws/include_winnt_h.patch"
