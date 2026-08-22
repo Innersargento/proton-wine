@@ -167,7 +167,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile.json << EOF
           {
             "type": "Proton",
-            "versionName": "10.0-4-arm64ec-small",
+            "versionName": "10.0-4-arm64ec",
             "versionCode": 2,
             "description": "Proton 10.0-4 arm64ec (stripped, zstd) - Windows compatibility layer with improved gaming support",
             "files": [],
