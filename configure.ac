@@ -615,7 +615,6 @@ case $host_os in
     dnl Disable modules that can't be used on Windows
     enable_loader=${enable_loader:-no}
     enable_server=${enable_server:-no}
-    enable_wine=${enable_wine:-no}
     dnl Disable dependencies that are not useful on Windows
     with_x=${with_x:-no}
     with_pthread=${with_pthread:-no}
@@ -1381,7 +1380,7 @@ then
                             [`test -n "$PKG_CONFIG" && $PKG_CONFIG --variable=wayland_scanner wayland-scanner 2>/dev/null`])],
               [WAYLAND_CLIENT_LIBS=""],[$WAYLAND_CLIENT_LIBS])])])
     WINE_PACKAGE_FLAGS(XKBCOMMON,[xkbcommon],,,,
-        [AC_CHECK_HEADERS([xkbcommon/xkbcommon.h, xkbcommon/xkbcommon-compose.h])
+        [AC_CHECK_HEADERS([xkbcommon/xkbcommon.h])
          AC_CHECK_LIB(xkbcommon,xkb_context_new,[:],[XKBCOMMON_LIBS=""],[$XKBCOMMON_LIBS])])
     WINE_PACKAGE_FLAGS(XKBREGISTRY,[xkbregistry],,,,
         [AC_CHECK_HEADERS([xkbcommon/xkbregistry.h])
@@ -2082,7 +2081,12 @@ fi
 
 dnl **** Platform-specific checks ****
 
-AC_SUBST(WINELOADER_PROGRAMS,"wine")
+case "$HOST_ARCH,$PE_ARCHS" in
+  x86_64,*i386*) wine_binary="wine" ;;
+  x86_64,*) wine_binary="wine64" ;;
+  *) wine_binary="wine" ;;
+esac
+AC_SUBST(WINELOADER_PROGRAMS,"$wine_binary")
 
 case $host_os in
   linux*)
@@ -2095,7 +2099,8 @@ esac
 
 if test "$wine_use_preloader" = "yes"
 then
-  WINELOADER_PROGRAMS="$WINELOADER_PROGRAMS wine-preloader"
+  test "$wine_binary" = wine || WINE_IGNORE_FILE(loader/wine-preloader)
+  WINELOADER_PROGRAMS="$WINELOADER_PROGRAMS $wine_binary-preloader"
   AC_DEFINE(HAVE_WINE_PRELOADER, 1, [Define to 1 if the Wine preloader is being used.])
 fi
 
@@ -2433,6 +2438,9 @@ test "x$enable_silent_rules" = xyes && makedep_flags="$makedep_flags -S"
 wine_srcdir=
 test "$srcdir" = . || wine_srcdir="$srcdir/"
 
+WINE_CONFIG_SYMLINK(wine,tools/winewrapper)
+WINE_CONFIG_SYMLINK(wine64,tools/winewrapper,["$wine_binary" = wine64 -o -n "$with_wine64"])
+
 WINE_CONFIG_MAKEFILE(dlls/acledit)
 WINE_CONFIG_MAKEFILE(dlls/aclui)
 WINE_CONFIG_MAKEFILE(dlls/activeds.tlb)
@@ -2515,7 +2523,6 @@ WINE_CONFIG_MAKEFILE(dlls/concrt140)
 WINE_CONFIG_MAKEFILE(dlls/concrt140/tests)
 WINE_CONFIG_MAKEFILE(dlls/connect)
 WINE_CONFIG_MAKEFILE(dlls/coremessaging)
-WINE_CONFIG_MAKEFILE(dlls/coremessaging/tests)
 WINE_CONFIG_MAKEFILE(dlls/credui)
 WINE_CONFIG_MAKEFILE(dlls/credui/tests)
 WINE_CONFIG_MAKEFILE(dlls/crtdll)
@@ -2816,7 +2823,6 @@ WINE_CONFIG_MAKEFILE(dlls/localspl)
 WINE_CONFIG_MAKEFILE(dlls/localspl/tests)
 WINE_CONFIG_MAKEFILE(dlls/localui)
 WINE_CONFIG_MAKEFILE(dlls/localui/tests)
-WINE_CONFIG_MAKEFILE(dlls/lsteamclient)
 WINE_CONFIG_MAKEFILE(dlls/lz32)
 WINE_CONFIG_MAKEFILE(dlls/lz32/tests)
 WINE_CONFIG_MAKEFILE(dlls/lzexpand.dll16,enable_win16)
@@ -3630,7 +3636,6 @@ WINE_CONFIG_MAKEFILE(server)
 WINE_CONFIG_MAKEFILE(tools,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/sfnt2fon,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/widl,,[test "x$enable_tools" = xno])
-WINE_CONFIG_MAKEFILE(tools/wine,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/winebuild,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/winedump,,[test "x$enable_tools" = xno])
 WINE_CONFIG_MAKEFILE(tools/winegcc,,[test "x$enable_tools" = xno])
@@ -3699,7 +3704,9 @@ AC_SUBST(SHELL,[/bin/sh])
 dnl Rules for re-running configure
 
 WINE_APPEND_RULE(
-[Makefile: config.status
+[all: wine
+	@echo \"Wine build complete.\"
+Makefile: config.status
 	@./config.status Makefile
 config.status: ${wine_srcdir}configure
 	@./config.status --recheck
@@ -3722,16 +3729,22 @@ dnl Rules for wineloader
 
 if test -n "$with_wine64"
 then
+    case "$with_wine64" in
+      /*) reldir="" ;;
+      *)  reldir="../" ;;
+    esac
     dnl Get rid of old symlinks
     rm -f fonts server 2>/dev/null
     WINE_APPEND_RULE(
-[all: loader-wow64 $with_wine64/loader-wow64
-loader-wow64:
-	rm -f \$[@] && \$(LN_S) $with_wine64/loader \$[@]
-$with_wine64/loader-wow64:
-	rm -f \$[@] && \$(LN_S) $ac_pwd/loader \$[@]
+[all: loader/wine64 loader/wine64-preloader $with_wine64/loader/wine $with_wine64/loader/wine-preloader
+loader/wine64 loader/wine64-preloader:
+	rm -f \$[@] && \$(LN_S) $reldir$with_wine64/\$[@] \$[@]
+$with_wine64/loader/wine:
+	rm -f \$[@] && \$(LN_S) $ac_pwd/loader/wine \$[@]
+$with_wine64/loader/wine-preloader:
+	rm -f \$[@] && \$(LN_S) $ac_pwd/loader/wine-preloader \$[@]
 clean::
-	rm -f loader-wow64 $with_wine64/loader-wow64])
+	rm -f loader/wine64 loader/wine64-preloader $with_wine64/loader/wine $with_wine64/loader/wine-preloader])
 else
     TOP_INSTALL_DEV="$TOP_INSTALL_DEV include"
     TOP_INSTALL_LIB="$TOP_INSTALL_LIB \
