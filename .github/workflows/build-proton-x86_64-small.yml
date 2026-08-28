@@ -117,6 +117,17 @@ jobs:
           wget https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64.tar.xz
           tar -xf llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64.tar.xz
 
+      - name: Check out ntsync-android (userspace ntsync)
+        uses: actions/checkout@v4
+        with:
+          repository: GameNative/ntsync-android
+          path: ntsync-android
+
+      - name: Set up Rust for ntsync-android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+
       - name: Run autogen.sh
         run: bash autogen.sh
 
