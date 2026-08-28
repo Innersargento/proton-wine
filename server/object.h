@@ -42,7 +42,7 @@ struct async;
 struct async_queue;
 struct winstation;
 struct object_type;
-struct inproc_sync;
+
 
 struct unicode_str
 {
@@ -95,7 +95,7 @@ struct object_ops
     /* sets the security descriptor of the object */
     int (*set_sd)( struct object *, const struct security_descriptor *, unsigned int );
     /* get the object full name */
-    WCHAR *(*get_full_name)(struct object *, data_size_t, data_size_t *);
+    WCHAR *(*get_full_name)(struct object *, data_size_t *);
     /* lookup a name if an object has a namespace */
     struct object *(*lookup_name)(struct object *, struct unicode_str *,unsigned int,struct object *);
     /* link an object's name into a parent object */
@@ -107,8 +107,6 @@ struct object_ops
                                 unsigned int options);
     /* return list of kernel objects */
     struct list *(*get_kernel_obj_list)(struct object *);
-    /* get a client-waitable in-process synchronization handle to this object */
-    struct inproc_sync *(*get_inproc_sync)(struct object *);
     /* close a handle to this object */
     int (*close_handle)(struct object *,struct process *,obj_handle_t);
     /* destroy on refcount == 0 */
@@ -152,7 +150,7 @@ extern void *memdup( const void *data, size_t len ) __WINE_ALLOC_SIZE(2) __WINE_
 extern void *alloc_object( const struct object_ops *ops );
 extern void namespace_add( struct namespace *namespace, struct object_name *ptr );
 extern const WCHAR *get_object_name( struct object *obj, data_size_t *len );
-extern WCHAR *default_get_full_name( struct object *obj, data_size_t max, data_size_t *ret_len ) __WINE_DEALLOC(free) __WINE_MALLOC;
+extern WCHAR *default_get_full_name( struct object *obj, data_size_t *ret_len ) __WINE_DEALLOC(free) __WINE_MALLOC;
 extern void dump_object_name( struct object *obj );
 extern struct object *lookup_named_object( struct object *root, const struct unicode_str *name,
                                            unsigned int attr, struct unicode_str *name_left );
@@ -184,7 +182,7 @@ extern struct security_descriptor *set_sd_from_token_internal( const struct secu
                                                                unsigned int set_info, struct token *token );
 extern int set_sd_defaults_from_token( struct object *obj, const struct security_descriptor *sd,
                                        unsigned int set_info, struct token *token );
-extern WCHAR *no_get_full_name( struct object *obj, data_size_t max, data_size_t *ret_len );
+extern WCHAR *no_get_full_name( struct object *obj, data_size_t *ret_len );
 extern struct object *no_lookup_name( struct object *obj, struct unicode_str *name,
                                       unsigned int attributes, struct object *root );
 extern int no_link_name( struct object *obj, struct object_name *name, struct object *parent );
@@ -236,18 +234,6 @@ extern void reset_event( struct event *event );
 /* mutex functions */
 
 extern void abandon_mutexes( struct thread *thread );
-
-/* in-process synchronization functions */
-
-extern struct inproc_sync *create_inproc_event( enum inproc_sync_type type, int signaled );
-extern struct inproc_sync *create_inproc_mutex( thread_id_t owner, unsigned int count );
-extern struct inproc_sync *create_inproc_semaphore( unsigned int count, unsigned int max );
-extern void set_inproc_event( struct inproc_sync *obj );
-extern void reset_inproc_event( struct inproc_sync *obj );
-extern void abandon_inproc_mutex( thread_id_t tid, struct inproc_sync *inproc_sync );
-extern int do_ntsync(void);
-
-extern struct inproc_sync *no_get_inproc_sync( struct object *obj );
 
 /* serial functions */
 
