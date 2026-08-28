@@ -800,6 +800,21 @@ unsigned int server_wait( const union select_op *select_op, data_size_t size, UI
 }
 
 
+/* helper function to perform a server-side wait on an internal handle without
+ * using the fast synchronization path */
+unsigned int server_wait_for_object( HANDLE handle, BOOL alertable, const LARGE_INTEGER *timeout )
+{
+    union select_op select_op;
+    UINT flags = SELECT_INTERRUPTIBLE;
+
+    if (alertable) flags |= SELECT_ALERTABLE;
+
+    select_op.wait.op = SELECT_WAIT;
+    select_op.wait.handles[0] = wine_server_obj_handle( handle );
+    return server_wait( &select_op, offsetof( union select_op, wait.handles[1] ), flags, timeout );
+}
+
+
 /***********************************************************************
  *              NtContinue  (NTDLL.@)
  */
@@ -876,7 +891,10 @@ unsigned int server_queue_process_apc( HANDLE process, const union apc_call *cal
         }
         else
         {
-            NtWaitForSingleObject( handle, FALSE, NULL );
+            if (!(do_fsync() || do_esync()))
+                server_wait_for_object( handle, FALSE, NULL );
+            else
+                NtWaitForSingleObject( handle, FALSE, NULL );
 
             SERVER_START_REQ( get_apc_result )
             {
@@ -1009,7 +1027,7 @@ union fd_cache_entry
 C_ASSERT( sizeof(union fd_cache_entry) == sizeof(LONG64) );
 
 #define FD_CACHE_BLOCK_SIZE  (65536 / sizeof(union fd_cache_entry))
-#define FD_CACHE_ENTRIES     128
+#define FD_CACHE_ENTRIES     256
 
 static union fd_cache_entry *fd_cache[FD_CACHE_ENTRIES];
 static union fd_cache_entry fd_cache_initial_block[FD_CACHE_BLOCK_SIZE];
@@ -1574,8 +1592,8 @@ size_t server_init_process(void)
 
         if (is_win64 && arch && !strcmp( arch, "win32" ))
             fatal_error( "WINEARCH is set to 'win32' but this is not supported in wow64 mode.\n" );
-        if (arch && strcmp( arch, "win32" ) && strcmp( arch, "win64" ))
-            fatal_error( "WINEARCH set to invalid value '%s', it must be either win32 or win64.\n", arch );
+        if (arch && strcmp( arch, "win32" ) && strcmp( arch, "win64" ) && strcmp( arch, "wow64" ))
+            fatal_error( "WINEARCH set to invalid value '%s', it must be win32, win64, or wow64.\n", arch );
 
         fd_socket = server_connect();
     }
@@ -1667,8 +1685,8 @@ size_t server_init_process(void)
     {
         if (is_win64)
             fatal_error( "'%s' is a 32-bit installation, it cannot support 64-bit applications.\n", config_dir );
-        if (arch && !strcmp( arch, "win64" ))
-            fatal_error( "WINEARCH set to win64 but '%s' is a 32-bit installation.\n", config_dir );
+        if (arch && (!strcmp( arch, "win64" ) || !strcmp( arch, "wow64" )))
+            fatal_error( "WINEARCH set to %s but '%s' is a 32-bit installation.\n", arch, config_dir );
     }
 
     set_thread_id( NtCurrentTeb(), pid, tid );
@@ -1810,12 +1828,17 @@ NTSTATUS WINAPI NtDuplicateObject( HANDLE source_process, HANDLE source, HANDLE 
         return result.dup_handle.status;
     }
 
+    /* hold fd_cache_mutex to prevent the fd from being added again between the
+     * call to remove_fd_from_cache and close_handle */
     server_enter_uninterrupted_section( &fd_cache_mutex, &sigset );
 
     /* always remove the cached fd; if the server request fails we'll just
      * retrieve it again */
     if (options & DUPLICATE_CLOSE_SOURCE)
+    {
         fd = remove_fd_from_cache( source );
+        close_inproc_sync_obj( source );
+    }
 
     SERVER_START_REQ( dup_handle )
     {
@@ -1881,6 +1904,8 @@ NTSTATUS WINAPI NtClose( HANDLE handle )
     if (HandleToLong( handle ) >= ~5 && HandleToLong( handle ) <= ~0)
         return STATUS_SUCCESS;
 
+    /* hold fd_cache_mutex to prevent the fd from being added again between the
+     * call to remove_fd_from_cache and close_handle */
     server_enter_uninterrupted_section( &fd_cache_mutex, &sigset );
 
     /* always remove the cached fd; if the server request fails we'll just
@@ -1892,6 +1917,8 @@ NTSTATUS WINAPI NtClose( HANDLE handle )
 
     if (do_esync())
         esync_close( handle );
+
+    close_inproc_sync_obj( handle );
 
     SERVER_START_REQ( close_handle )
     {
