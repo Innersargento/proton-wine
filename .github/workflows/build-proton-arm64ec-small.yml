@@ -114,6 +114,11 @@ jobs:
       - name: Build sysvshm library
         run: bash build-scripts/build-step-arm64ec.sh --build-sysvshm
 
+      - name: Build ntsync-android library
+        env:
+          NTSYNC_ANDROID_DIR: ${{ github.workspace }}/ntsync-android
+        run: bash build-scripts/build-step-arm64ec.sh --build-ntsync-android
+
       - name: Configure build
         env:
           CROSSCFLAGS: -g0 -O2

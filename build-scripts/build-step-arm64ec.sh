@@ -80,6 +80,34 @@ do
     fi
   fi
 
+  if [ "$arg" == "--build-ntsync-android" ];
+  then
+    # Build libntsync_android.a (userspace ntsync) from the sibling project
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    NTSYNC_DIR="${NTSYNC_ANDROID_DIR:-$PROJECT_ROOT/../ntsync-android}"
+
+    if [ -d "$NTSYNC_DIR" ]; then
+        echo "Building ntsync-android library..."
+        "$NTSYNC_DIR/build-scripts/build-android.sh" --build
+        if [ $? -eq 0 ]; then
+            echo "ntsync-android built successfully"
+            mkdir -p "$deps/lib"
+            # Static archive: ntdll/wineserver link it in, no runtime .so needed.
+            cp "$NTSYNC_DIR/target/aarch64-linux-android/release/libntsync_android.a" "$deps/lib/"
+            rm -f "$deps/lib/libntsync_android.so"
+            echo "Copied libntsync_android.a (arm64-v8a) to $deps/lib/"
+            # The archive is statically linked into ntdll/wineserver, but make
+            # does not track it as a dependency; force a relink.
+            rm -f "$PROJECT_ROOT/dlls/ntdll/ntdll.so" "$PROJECT_ROOT/server/wineserver" "$PROJECT_ROOT/server/wineserver64" 2>/dev/null
+        else
+            echo "Warning: ntsync-android build failed"
+        fi
+    else
+        echo "Warning: ntsync-android project not found at $NTSYNC_DIR"
+    fi
+  fi
+
   if [ "$arg" == "--configure" ];
   then
     ./configure \
@@ -167,6 +195,14 @@ do
       "common/dlls_ntdll_unix_fsync_c.patch"
       "common/server_esync_c.patch"
       "common/server_fsync_c.patch"
+
+      # ntsync (userspace ntsync via libntsync_android)
+      "common/dlls_ntdll_makefile_in.patch"
+      "common/dlls_ntdll_unix_sync_c.patch"
+      "common/server_makefile_in.patch"
+      "common/server_inproc_sync_c.patch"
+      "common/server_thread_c.patch"
+      "common/server_process_c.patch"
 
       # winex11
       "common/dlls_winex11_drv_bitblt_c.patch"

@@ -123,6 +123,16 @@ jobs:
           else
             bash build-scripts/build-step-arm64ec.sh --build-sysvshm
           fi
+
+      - name: Build ntsync-android library for ${{ matrix.arch }}
+        env:
+          NTSYNC_ANDROID_DIR: ${{ github.workspace }}/ntsync-android
+        run: |
+          if [ "${{ matrix.arch }}" == "x86_64" ]; then
+            bash build-scripts/build-step-x86_64.sh --build-ntsync-android
+          else
+            bash build-scripts/build-step-arm64ec.sh --build-ntsync-android
+          fi
       
       - name: Configure build for ${{ matrix.arch }}
         run: |
