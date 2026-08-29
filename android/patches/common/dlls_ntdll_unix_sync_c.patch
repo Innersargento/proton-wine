@@ -7,7 +7,7 @@ index d92ce541be4..786491daeb9 100644
  #endif
  
 +#ifdef __ANDROID__
-+#include "../android/ntsync_android/ntsync_user.h"
++#include "../../../android/ntsync_android/ntsync_user.h"
 +#else
  #include "ntsync_tmp.h"
 +#endif
