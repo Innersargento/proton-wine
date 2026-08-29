@@ -201,7 +201,7 @@ do
       "common/dlls_ntdll_unix_sync_c.patch"
       "common/server_makefile_in.patch"
       "common/server_inproc_sync_c.patch"
-      "common/server_protocol_def"
+      "common/server_protocol_def.patch"
       "common/server_process_c.patch"
 
       # winex11
