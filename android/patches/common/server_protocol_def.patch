@@ -1,0 +1,12 @@
+﻿diff --git a/server/protocol.def b/server/protocol.def
+index 23453fbaba5..ad18da018c2 100644
+--- a/server/protocol.def
++++ b/server/protocol.def
+@@ -4278,6 +4278,7 @@ enum inproc_sync_type
+ @REPLY
+     int type;                   /* object type */
+     unsigned int access;        /* handle access rights */
++    unsigned int fsync_shm_idx; /* userspace ntsync object handle (Android only; fd sent out-of-band otherwise) */
+ @END
+ 
+ /* Begin a client-side wait on a message queue */
