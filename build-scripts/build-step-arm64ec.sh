@@ -1,4 +1,11 @@
 #!/bin/bash
+set -e
+
+API=28
+for option in "$@"; do
+    if [ "$option" = "--enable-16kb-pages" ]; then API=35; fi
+done
+export API
 
 export ARCH="aarch64"
 export WIN_ARCH="arm64ec,aarch64,i386"
@@ -11,7 +18,7 @@ export install_dir=$deps/../opt/wine
 #export TOOLCHAIN="$HOME/Android/android-ndk-r27d/toolchains/llvm/prebuilt/linux-x86_64/bin"
 export TOOLCHAIN="$HOME/Android/Sdk/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/bin"
 export LLVM_MINGW_TOOLCHAIN="$HOME/toolchains/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64/bin"
-export TARGET=aarch64-linux-android28
+export TARGET=aarch64-linux-android${API}
 export PATH=$LLVM_MINGW_TOOLCHAIN:$PATH
 
 export CC=$TOOLCHAIN/$TARGET-clang
@@ -44,18 +51,14 @@ export GSTREAMER_LIBS="-L$deps/lib -lgstgl-1.0 -lgstapp-1.0 -lgstvideo-1.0 -lgst
 export FFMPEG_CFLAGS="-I$deps/include/libavutil -I$deps/include/libavcodec -I$deps/include/libavformat"
 export FFMPEG_LIBS="-L$deps/lib -lavutil -lavcodec -lavformat"
 
+if [ "$API" = 35 ]; then
+    export CFLAGS="$CFLAGS -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES"
+    export CXXFLAGS="$CFLAGS"
+    export LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
+fi
+
 for arg in "$@"
 do
-  if [ "$arg" == "--enable-16kb-pages" ];
-  then
-    echo "Enabling 16KB page size support..."
-    export TARGET=aarch64-linux-android35
-    export C_OPTS="$C_OPTS -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES"
-    export CFLAGS="$C_OPTS"
-    export CXXFLAGS="$C_OPTS"
-    export LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
-    echo "16KB page size support enabled"
-  fi
 
   if [ "$arg" == "--build-sysvshm" ];
   then
@@ -104,72 +107,13 @@ do
             echo "Warning: ntsync-android build failed"
         fi
     else
-        echo "Warning: ntsync-android project not found at $NTSYNC_DIR"
+        echo "Error: ntsync-android project not found at $NTSYNC_DIR" >&2
+        exit 1
     fi
   fi
 
   if [ "$arg" == "--configure" ];
   then
-    ./configure \
-      --enable-archs=$WIN_ARCH \
-      --host=$TARGET \
-      --prefix $install_dir \
-      --bindir $install_dir/bin \
-      --libdir $install_dir/lib \
-      --exec-prefix $install_dir \
-      --with-mingw=clang \
-      --with-wine-tools=./wine-tools \
-      --enable-win64 \
-      --disable-win16 \
-      --enable-nls \
-      --disable-amd_ags_x64 \
-      --enable-wineandroid_drv=no \
-      --disable-tests \
-      --with-alsa \
-      --without-capi \
-      --without-coreaudio \
-      --without-cups \
-      --without-dbus \
-      --without-ffmpeg \
-      --with-fontconfig \
-      --with-freetype \
-      --without-gcrypt \
-      --without-gettext \
-      --with-gettextpo=no \
-      --without-gphoto \
-      --with-gnutls \
-      --without-gssapi \
-      --with-gstreamer \
-      --without-inotify \
-      --without-krb5 \
-      --without-netapi \
-      --without-opencl \
-      --with-opengl \
-      --without-osmesa \
-      --without-oss \
-      --without-pcap \
-      --without-pcsclite \
-      --without-piper \
-      --with-pthread \
-      --with-pulse \
-      --without-sane \
-      --with-sdl \
-      --without-udev \
-      --without-unwind \
-      --without-usb \
-      --without-v4l2 \
-      --without-vosk \
-      --with-vulkan \
-      --without-wayland \
-      --with-xcomposite \
-      --without-xfixes \
-      --without-xinerama \
-      --without-xrandr \
-      --without-xrender \
-      --without-xshape \
-      --with-xshm \
-      --without-xxf86vm
-
     echo "Applying patches..."
 
     PATCHES=(
@@ -202,7 +146,7 @@ do
       "common/server_makefile_in.patch"
       "common/server_inproc_sync_c.patch"
       "common/server_protocol_def.patch"
-      "common/server_process_c.patch"
+      "common/configure_ac.patch"
 
       # winex11
       "common/dlls_winex11_drv_bitblt_c.patch"
@@ -307,10 +251,77 @@ do
     )
 
     for patch in "${PATCHES[@]}"; do
-#      if git apply --check ./android/patches/$patch 2>/dev/null; then
-        git apply ./android/patches/$patch
-#      fi
+      if git apply --reverse --check "./android/patches/$patch" 2>/dev/null; then
+        echo "Already applied: $patch"
+      else
+        git apply "./android/patches/$patch"
+      fi
     done
+
+    perl tools/make_requests
+    autoreconf -f
+
+    ./configure \
+      --enable-archs=$WIN_ARCH \
+      --host=$TARGET \
+      --prefix $install_dir \
+      --bindir $install_dir/bin \
+      --libdir $install_dir/lib \
+      --exec-prefix $install_dir \
+      --with-mingw=clang \
+      --with-wine-tools=./wine-tools \
+      --enable-win64 \
+      --disable-win16 \
+      --enable-nls \
+      --disable-amd_ags_x64 \
+      --enable-wineandroid_drv=no \
+      --disable-tests \
+      --with-alsa \
+      --without-capi \
+      --without-coreaudio \
+      --without-cups \
+      --without-dbus \
+      --without-ffmpeg \
+      --with-fontconfig \
+      --with-freetype \
+      --without-gcrypt \
+      --without-gettext \
+      --with-gettextpo=no \
+      --without-gphoto \
+      --with-gnutls \
+      --without-gssapi \
+      --with-gstreamer \
+      --without-inotify \
+      --without-krb5 \
+      --without-netapi \
+      --without-opencl \
+      --with-opengl \
+      --without-osmesa \
+      --without-oss \
+      --without-pcap \
+      --without-pcsclite \
+      --without-piper \
+      --with-pthread \
+      --with-pulse \
+      --without-sane \
+      --with-sdl \
+      --without-udev \
+      --without-unwind \
+      --without-usb \
+      --without-v4l2 \
+      --without-vosk \
+      --with-vulkan \
+      --without-wayland \
+      --with-xcomposite \
+      --without-xfixes \
+      --without-xinerama \
+      --without-xrandr \
+      --without-xrender \
+      --without-xshape \
+      --with-xshm \
+      --without-xxf86vm
+
+
   fi
 
   if [ "$arg" == "--build" ]

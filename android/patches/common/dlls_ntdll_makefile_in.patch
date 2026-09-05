@@ -1,13 +1,12 @@
 diff --git a/dlls/ntdll/Makefile.in b/dlls/ntdll/Makefile.in
-index 457ae577399..a8f7987d119 100644
 --- a/dlls/ntdll/Makefile.in
 +++ b/dlls/ntdll/Makefile.in
-@@ -4,7 +4,7 @@ UNIXLIB   = ntdll.so
+@@ -4,7 +4,7 @@
  IMPORTLIB = ntdll
  IMPORTS   = $(MUSL_PE_LIBS) winecrt0
  UNIX_CFLAGS  = $(UNWIND_CFLAGS)
 -UNIX_LIBS    = $(IOKIT_LIBS) $(COREFOUNDATION_LIBS) $(CORESERVICES_LIBS) $(RT_LIBS) $(PTHREAD_LIBS) $(UNWIND_LIBS) $(I386_LIBS) $(PROCSTAT_LIBS)
-+UNIX_LIBS    = $(IOKIT_LIBS) $(COREFOUNDATION_LIBS) $(CORESERVICES_LIBS) $(RT_LIBS) $(PTHREAD_LIBS) $(UNWIND_LIBS) $(I386_LIBS) $(PROCSTAT_LIBS) -lntsync_android
++UNIX_LIBS    = $(IOKIT_LIBS) $(COREFOUNDATION_LIBS) $(CORESERVICES_LIBS) $(RT_LIBS) $(PTHREAD_LIBS) $(UNWIND_LIBS) $(I386_LIBS) $(PROCSTAT_LIBS) $(NTSYNC_ANDROID_LIBS)
  
  EXTRADLLFLAGS = -nodefaultlibs
  i386_EXTRADLLFLAGS = -Wl,--image-base,0x7bc00000

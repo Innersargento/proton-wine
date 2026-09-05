@@ -1,12 +1,21 @@
-﻿diff --git a/server/protocol.def b/server/protocol.def
-index 23453fbaba5..ad18da018c2 100644
+diff --git a/server/protocol.def b/server/protocol.def
 --- a/server/protocol.def
 +++ b/server/protocol.def
-@@ -4278,6 +4278,7 @@ enum inproc_sync_type
+@@ -4270,6 +4270,8 @@
+ 
+ /* Obtain a fd for the ntsync device */
+ @REQ(get_linux_sync_device)
++@REPLY
++    int userspace;              /* Android object ids instead of Unix fds */
+ @END
+ 
+ /* Get the in-process synchronization fd associated with the waitable handle */
+@@ -4278,6 +4280,8 @@
  @REPLY
      int type;                   /* object type */
      unsigned int access;        /* handle access rights */
-+    unsigned int fsync_shm_idx; /* userspace ntsync object handle (Android only; fd sent out-of-band otherwise) */
++    unsigned int obj;           /* Android shared-memory object id */
++    obj_handle_t retained_handle; /* keeps the Android object alive */
  @END
  
  /* Begin a client-side wait on a message queue */

@@ -1,47 +1,129 @@
-﻿diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
-index d92ce541be4..786491daeb9 100644
+diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
 --- a/dlls/ntdll/unix/sync.c
 +++ b/dlls/ntdll/unix/sync.c
-@@ -61,7 +61,11 @@
+@@ -61,8 +61,12 @@
  # include <sys/event.h>
  #endif
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +#include "../../../android/ntsync_android/ntsync_user.h"
 +#else
+ #ifdef __linux__
  #include "ntsync_tmp.h"
 +#endif
+ #endif
  
  #include "ntstatus.h"
- #define WIN32_NO_STATUS
-@@ -315,6 +319,11 @@ int get_linux_sync_device(void)
+@@ -309,7 +313,7 @@
+     return STATUS_SUCCESS;
+ }
+ 
+-#ifdef NTSYNC_IOC_EVENT_READ
++#if defined(NTSYNC_IOC_EVENT_READ) || defined(HAVE_NTSYNC_ANDROID)
+ 
+ int get_linux_sync_device(void)
+ {
+@@ -317,7 +321,9 @@
  
      if (device == -2)
      {
-+#ifdef __ANDROID__
-+        /* userspace ntsync: no server round-trip, no fd to receive, we
-+         * just need to know the shared-memory region is usable. */
-+        device = ntsync_init( NULL ) ? -1 : 0;
-+#else
++#ifndef HAVE_NTSYNC_ANDROID
          obj_handle_t handle;
++#endif
          sigset_t sigset;
          NTSTATUS ret;
-@@ -341,6 +350,7 @@ int get_linux_sync_device(void)
-         }
+         int fd = -1;
+@@ -333,8 +339,20 @@
+             {
+                 if (!(ret = wine_server_call( req )))
+                 {
++#ifdef HAVE_NTSYNC_ANDROID
++                    if (reply->userspace)
++                    {
++                        if (ntsync_init( NULL ))
++                        {
++                            ERR( "Cannot attach to the wineserver ntsync shared region\n" );
++                            abort();
++                        }
++                        fd = 0;
++                    }
++#else
+                     fd = receive_fd( &handle );
+                     assert( !handle );
++#endif
+                 }
+             }
+             SERVER_END_REQ;
+@@ -385,6 +403,7 @@
+ {
+     LONG refcount;
+     int fd;
++    obj_handle_t server_handle; /* retains the server-owned Android object */
+     unsigned int access;
+     unsigned short type; /* enum inproc_sync_type, stored as short to save space */
+     unsigned short closed;
+@@ -394,14 +413,27 @@
+ {
+     /* save the fd now; as soon as the refcount hits 0 we cannot
+      * access the cache anymore */
++#ifdef HAVE_NTSYNC_ANDROID
++    obj_handle_t server_handle = cache->server_handle;
++#else
+     int fd = cache->fd;
++#endif
+     LONG refcount = InterlockedDecrement( &cache->refcount );
  
-         server_leave_uninterrupted_section( &fd_cache_mutex, &sigset );
+     assert( refcount >= 0 );
+ 
+     if (!refcount)
+     {
++#ifdef HAVE_NTSYNC_ANDROID
++        SERVER_START_REQ( close_handle )
++        {
++            req->handle = server_handle;
++            wine_server_call( req );
++        }
++        SERVER_END_REQ;
++#else
+         close( fd );
 +#endif
      }
-     return device;
  }
-@@ -562,9 +572,15 @@ static NTSTATUS get_inproc_sync_obj( HANDLE handle, enum inproc_sync_type desire
+ 
+@@ -419,7 +451,7 @@
+ }
+ 
+ static struct inproc_sync_cache_entry *cache_inproc_sync_obj( HANDLE handle, int fd,
+-                                                              enum inproc_sync_type type, unsigned int access )
++                                                              enum inproc_sync_type type, unsigned int access, obj_handle_t server_handle )
+ {
+     unsigned int entry, idx = inproc_sync_handle_to_index( handle, &entry );
+     struct inproc_sync_cache_entry *cache;
+@@ -460,6 +492,7 @@
+     }
+ 
+     cache->fd = fd;
++    cache->server_handle = server_handle;
+     cache->type = type;
+     cache->access = access;
+     cache->closed = FALSE;
+@@ -533,6 +566,7 @@
+     sigset_t sigset;
+     NTSTATUS ret;
+     int fd;
++    obj_handle_t server_handle = 0;
+ 
+     /* We don't need the device right now, but if we can't access it, that
+      * means ntsync isn't available. Fail fast in that case. */
+@@ -566,9 +600,16 @@
          req->handle = wine_server_obj_handle( handle );
          if (!(ret = wine_server_call( req )))
          {
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +            /* userspace ntsync object handle, valid process-wide; no fd
 +             * is passed out-of-band on Android. */
-+            fd = reply->fsync_shm_idx;
++            fd = reply->obj;
++            server_handle = reply->retained_handle;
 +#else
              obj_handle_t fd_handle;
              fd = receive_fd( &fd_handle );
@@ -50,11 +132,28 @@ index d92ce541be4..786491daeb9 100644
              access = reply->access;
              type = reply->type;
          }
-@@ -612,7 +628,11 @@ static NTSTATUS linux_release_semaphore_obj( int obj, ULONG count, ULONG *prev_c
+@@ -581,7 +622,7 @@
+         return ret;
+     }
+ 
+-    cache = cache_inproc_sync_obj( handle, fd, type, access );
++    cache = cache_inproc_sync_obj( handle, fd, type, access, server_handle );
+ 
+     server_leave_uninterrupted_section( &fd_cache_mutex, &sigset );
+ 
+@@ -589,6 +630,7 @@
+     {
+         cache = stack_cache;
+         cache->fd = fd;
++        cache->server_handle = server_handle;
+         cache->type = type;
+         cache->access = access;
+         cache->closed = FALSE;
+@@ -617,7 +659,11 @@
  {
      NTSTATUS ret;
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    if ((ret = ntsync_sem_release( obj, &count )) < 0) { errno = -ret; ret = -1; }
 +#else
      ret = ioctl( obj, NTSYNC_IOC_SEM_RELEASE, &count );
@@ -62,11 +161,11 @@ index d92ce541be4..786491daeb9 100644
      if (ret < 0)
      {
          if (errno == EOVERFLOW)
-@@ -644,7 +664,11 @@ static NTSTATUS linux_query_semaphore_obj( int obj, SEMAPHORE_BASIC_INFORMATION
+@@ -649,7 +695,11 @@
      struct ntsync_sem_args args = {0};
      NTSTATUS ret;
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    if ((ret = ntsync_sem_read( obj, &args )) < 0) { errno = -ret; ret = -1; }
 +#else
      ret = ioctl( obj, NTSYNC_IOC_SEM_READ, &args );
@@ -74,11 +173,11 @@ index d92ce541be4..786491daeb9 100644
      if (ret < 0)
          return errno_to_status( errno );
      info->CurrentCount = args.count;
-@@ -672,7 +696,11 @@ static NTSTATUS linux_set_event_obj( int obj, LONG *prev_state )
+@@ -677,7 +727,11 @@
      NTSTATUS ret;
-     __u32 prev;
+     uint32_t prev;
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    if ((ret = ntsync_event_set( obj, &prev )) < 0) { errno = -ret; ret = -1; }
 +#else
      ret = ioctl( obj, NTSYNC_IOC_EVENT_SET, &prev );
@@ -86,11 +185,11 @@ index d92ce541be4..786491daeb9 100644
      if (ret < 0)
          return errno_to_status( errno );
      if (prev_state) *prev_state = prev;
-@@ -699,7 +727,11 @@ static NTSTATUS linux_reset_event_obj( int obj, LONG *prev_state )
+@@ -704,7 +758,11 @@
      NTSTATUS ret;
-     __u32 prev;
+     uint32_t prev;
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    if ((ret = ntsync_event_reset( obj, &prev )) < 0) { errno = -ret; ret = -1; }
 +#else
      ret = ioctl( obj, NTSYNC_IOC_EVENT_RESET, &prev );
@@ -98,11 +197,11 @@ index d92ce541be4..786491daeb9 100644
      if (ret < 0)
          return errno_to_status( errno );
      if (prev_state) *prev_state = prev;
-@@ -726,7 +758,11 @@ static NTSTATUS linux_pulse_event_obj( int obj, LONG *prev_state )
+@@ -731,7 +789,11 @@
      NTSTATUS ret;
-     __u32 prev;
+     uint32_t prev;
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    if ((ret = ntsync_event_pulse( obj, &prev )) < 0) { errno = -ret; ret = -1; }
 +#else
      ret = ioctl( obj, NTSYNC_IOC_EVENT_PULSE, &prev );
@@ -110,11 +209,11 @@ index d92ce541be4..786491daeb9 100644
      if (ret < 0)
          return errno_to_status( errno );
      if (prev_state) *prev_state = prev;
-@@ -753,7 +789,11 @@ static NTSTATUS linux_query_event_obj( int obj, enum inproc_sync_type type, EVEN
+@@ -758,7 +820,11 @@
      struct ntsync_event_args args = {0};
      NTSTATUS ret;
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    if ((ret = ntsync_event_read( obj, &args )) < 0) { errno = -ret; ret = -1; }
 +#else
      ret = ioctl( obj, NTSYNC_IOC_EVENT_READ, &args );
@@ -122,11 +221,11 @@ index d92ce541be4..786491daeb9 100644
      if (ret < 0)
          return errno_to_status( errno );
      info->EventType = (type == INPROC_SYNC_AUTO_EVENT) ? SynchronizationEvent : NotificationEvent;
-@@ -782,7 +822,11 @@ static NTSTATUS linux_release_mutex_obj( int obj, LONG *prev_count )
+@@ -787,7 +853,11 @@
      NTSTATUS ret;
  
      args.owner = GetCurrentThreadId();
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    if ((ret = ntsync_mutex_unlock( obj, &args )) < 0) { errno = -ret; ret = -1; }
 +#else
      ret = ioctl( obj, NTSYNC_IOC_MUTEX_UNLOCK, &args );
@@ -134,11 +233,11 @@ index d92ce541be4..786491daeb9 100644
  
      if (ret < 0)
      {
-@@ -816,7 +860,11 @@ static NTSTATUS linux_query_mutex_obj( int obj, MUTANT_BASIC_INFORMATION *info )
+@@ -821,7 +891,11 @@
      struct ntsync_mutex_args args = {0};
      NTSTATUS ret;
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    if ((ret = ntsync_mutex_read( obj, &args )) < 0) { errno = -ret; ret = -1; }
 +#else
      ret = ioctl( obj, NTSYNC_IOC_MUTEX_READ, &args );
@@ -146,14 +245,17 @@ index d92ce541be4..786491daeb9 100644
  
      if (ret < 0)
      {
-@@ -932,6 +980,16 @@ static NTSTATUS linux_wait_objs( int device, const DWORD count, const int *objs,
-     if (alertable)
-         args.alert = get_inproc_alert_obj();
+@@ -945,6 +1019,19 @@
+         args.alert = alert;
+     }
  
-+#ifdef __ANDROID__
++#ifdef HAVE_NTSYNC_ANDROID
 +    (void)device;
 +    (void)request;
-+    ret = wait_any || count == 1 ? ntsync_wait_any( &args ) : ntsync_wait_all( &args );
++    do
++    {
++        ret = wait_any || count == 1 ? ntsync_wait_any( &args ) : ntsync_wait_all( &args );
++    } while (ret == -EINTR);
 +    if (ret < 0)
 +    {
 +        errno = -ret;
@@ -163,7 +265,7 @@ index d92ce541be4..786491daeb9 100644
      if (wait_any || count == 1)
          request = NTSYNC_IOC_WAIT_ANY;
      else
-@@ -941,6 +999,7 @@ static NTSTATUS linux_wait_objs( int device, const DWORD count, const int *objs,
+@@ -954,6 +1041,7 @@
      {
          ret = ioctl( device, request, &args );
      } while (ret < 0 && errno == EINTR);
