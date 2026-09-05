@@ -1,0 +1,21 @@
+diff --git a/configure.ac b/configure.ac
+--- a/configure.ac
++++ b/configure.ac
+@@ -1619,6 +1619,17 @@
+ WINE_CHECK_LIB_FUNCS(\
+         pthread_getthreadid_np,
+         [$PTHREAD_LIBS])
++
++dnl **** Android userspace ntsync (required for Android builds) ****
++case "$host_os" in
++  *android*)
++    AC_CHECK_LIB([:libntsync_android.a], ntsync_init,
++      [AC_DEFINE(HAVE_NTSYNC_ANDROID, 1, [Define if using Android userspace ntsync.])
++       AC_SUBST(NTSYNC_ANDROID_LIBS, "-l:libntsync_android.a -ldl -lm")],
++      [AC_MSG_ERROR([libntsync_android is missing; run --build-ntsync-android before --configure.])],
++      [-ldl -lm])
++    ;;
++esac
+ 
+ dnl **** Check for gettextpo ****
+ if test "x$enable_tools" != xno -a "x$with_gettextpo" = xyes

@@ -1,4 +1,11 @@
 #!/bin/bash
+set -e
+
+API=28
+for option in "$@"; do
+    if [ "$option" = "--enable-16kb-pages" ]; then API=35; fi
+done
+export API
 
 export ARCH="x86_64"
 export WIN_ARCH="x86_64,i386"
@@ -11,7 +18,7 @@ export install_dir=$deps/../opt/wine
 #export TOOLCHAIN="$HOME/Android/android-ndk-r27d/toolchains/llvm/prebuilt/linux-x86_64/bin"
 export TOOLCHAIN="$HOME/Android/Sdk/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/bin"
 export LLVM_MINGW_TOOLCHAIN="$HOME/toolchains/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64/bin"
-export TARGET=x86_64-linux-android28
+export TARGET=x86_64-linux-android${API}
 export PATH=$LLVM_MINGW_TOOLCHAIN:$PATH
 
 export CC=$TOOLCHAIN/$TARGET-clang
@@ -44,18 +51,14 @@ export GSTREAMER_LIBS="-L$deps/lib -lgstgl-1.0 -lgstapp-1.0 -lgstvideo-1.0 -lgst
 export FFMPEG_CFLAGS="-I$deps/include/libavutil -I$deps/include/libavcodec -I$deps/include/libavformat"
 export FFMPEG_LIBS="-L$deps/lib -lavutil -lavcodec -lavformat"
 
+if [ "$API" = 35 ]; then
+    export CFLAGS="$CFLAGS -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES"
+    export CXXFLAGS="$CFLAGS"
+    export LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
+fi
+
 for arg in "$@"
 do
-  if [ "$arg" == "--enable-16kb-pages" ];
-  then
-    echo "Enabling 16KB page size support..."
-    export TARGET=x86_64-linux-android35
-    export C_OPTS="$C_OPTS -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES"
-    export CFLAGS="$C_OPTS"
-    export CXXFLAGS="$C_OPTS"
-    export LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
-    echo "16KB page size support enabled"
-  fi
 
   if [ "$arg" == "--build-sysvshm" ];
   then
@@ -79,9 +82,130 @@ do
         cd "$PROJECT_ROOT"
     fi
   fi
+  
+  if [ "$arg" == "--build-ntsync-android" ];
+  then
+    # Build libntsync_android.a (userspace ntsync) from the sibling project
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    NTSYNC_DIR="${NTSYNC_ANDROID_DIR:-$PROJECT_ROOT/../ntsync-android}"
+
+    if [ -d "$NTSYNC_DIR" ]; then
+        echo "Building ntsync-android library..."
+        "$NTSYNC_DIR/build-scripts/build-android.sh" --build
+        if [ $? -eq 0 ]; then
+            echo "ntsync-android built successfully"
+            mkdir -p "$deps/lib"
+            # Static archive: ntdll/wineserver link it in, no runtime .so needed.
+            cp "$NTSYNC_DIR/target/x86_64-linux-android/release/libntsync_android.a" "$deps/lib/"
+            rm -f "$deps/lib/libntsync_android.so"
+            echo "Copied libntsync_android.a (x86_64) to $deps/lib/"
+            # The archive is statically linked into ntdll/wineserver, but make
+            # does not track it as a dependency; force a relink.
+            rm -f "$PROJECT_ROOT/dlls/ntdll/ntdll.so" "$PROJECT_ROOT/server/wineserver" "$PROJECT_ROOT/server/wineserver64" 2>/dev/null
+        else
+            echo "Warning: ntsync-android build failed"
+        fi
+    else
+        echo "Error: ntsync-android project not found at $NTSYNC_DIR" >&2
+        exit 1
+    fi
+  fi
 
   if [ "$arg" == "--configure" ];
   then
+    echo "Applying patches..."
+
+    PATCHES=(
+      # android network patch
+      "common/dlls_dnsapi_libresolv_c.patch"
+      "common/dlls_dnsapi_record_c.patch"
+      "common/dlls_nsiproxy_sys_ip_c.patch"
+      "common/dlls_nsiproxy_sys_ndis_c.patch"
+      "common/dlls_nsiproxy_sys_nsi_common_h.patch"
+      "common/dlls_user32_makefile_in.patch"
+      "common/dlls_ws2_32_socket_c.patch"
+      "common/server_token_c.patch"
+      "common/server_unicode_c.patch"
+
+      # midi support
+      "common/midi_support.patch"
+
+      # sdl patch
+      "common/dlls_winebus_sys_bus_sdl_c.patch"
+
+      # shm_utils
+      "common/dlls_ntdll_unix_esync_c.patch"
+      "common/dlls_ntdll_unix_fsync_c.patch"
+      "common/server_esync_c.patch"
+      "common/server_fsync_c.patch"
+
+      # ntsync (userspace ntsync via libntsync_android)
+      "common/dlls_ntdll_makefile_in.patch"
+      "common/dlls_ntdll_unix_sync_c.patch"
+      "common/server_makefile_in.patch"
+      "common/server_inproc_sync_c.patch"
+      "common/server_protocol_def.patch"
+      "common/configure_ac.patch"
+
+      # winex11
+      "common/dlls_winex11_drv_bitblt_c.patch"
+      "common/dlls_winex11_drv_desktop_c.patch"
+      "common/dlls_winex11_drv_keyboard_c.patch"
+      "common/dlls_winex11_drv_mouse_c.patch"
+      "common/dlls_winex11_drv_opengl_c.patch"
+      "common/dlls_winex11_drv_window_c.patch"
+      "common/dlls_winex11_drv_x11drv_h.patch"
+      "common/dlls_winex11_drv_x11drv_main_c.patch"
+
+      # address space patches
+      "common/loader_preloader_c.patch"
+      "x86_64/dlls_ntdll_unix_virtual_c.patch"
+
+      # syscall Patches
+      "x86_64/dlls_ntdll_unix_signal_x86_64_c.patch"
+
+      # pulse Patches
+      "common/dlls_winepulse_drv_pulse_c.patch"
+
+      # desktop patches
+      "common/programs_explorer_desktop_c.patch"
+
+      # path patches
+      "common/dlls_ntdll_unix_server_c.patch"
+
+      # winlator patches
+      "common/dlls_amd_ags_x64_unixlib_c.patch"
+
+      # shell32 file operation patches (fix crash copying to a drive root e.g. "C:")
+      "common/dlls_shell32_shlfileop_c.patch"
+
+      # shortcut patch
+      "common/programs_winemenubuilder_winemenubuilder_c.patch"
+
+      # xuser patches
+      "common/dlls_advapi32_advapi_c.patch"
+
+      # browser patches
+      "common/programs_winebrowser_makefile_in.patch"
+      "common/programs_winebrowser_main_c.patch"
+
+      # clipboard patches
+      "common/dlls_user32_clipboard_c.patch"
+      "common/dlls_win32u_clipboard_c.patch"
+    )
+
+    for patch in "${PATCHES[@]}"; do
+      if git apply --reverse --check "./android/patches/$patch" 2>/dev/null; then
+        echo "Already applied: $patch"
+      else
+        git apply "./android/patches/$patch"
+      fi
+    done
+
+    perl tools/make_requests
+    autoreconf -f
+
     ./configure \
       --enable-archs=$WIN_ARCH \
       --host=$TARGET \
@@ -142,84 +266,7 @@ do
       --without-xshm \
       --without-xxf86vm
 
-    echo "Applying patches..."
 
-    PATCHES=(
-      # android network patch
-      "common/dlls_dnsapi_libresolv_c.patch"
-      "common/dlls_dnsapi_record_c.patch"
-      "common/dlls_nsiproxy_sys_ip_c.patch"
-      "common/dlls_nsiproxy_sys_ndis_c.patch"
-      "common/dlls_nsiproxy_sys_nsi_common_h.patch"
-      "common/dlls_user32_makefile_in.patch"
-      "common/dlls_ws2_32_socket_c.patch"
-      "common/server_token_c.patch"
-      "common/server_unicode_c.patch"
-
-      # midi support
-      "common/midi_support.patch"
-
-      # sdl patch
-      "common/dlls_winebus_sys_bus_sdl_c.patch"
-
-      # shm_utils
-      "common/dlls_ntdll_unix_esync_c.patch"
-      "common/dlls_ntdll_unix_fsync_c.patch"
-      "common/server_esync_c.patch"
-      "common/server_fsync_c.patch"
-
-      # winex11
-      "common/dlls_winex11_drv_bitblt_c.patch"
-      "common/dlls_winex11_drv_desktop_c.patch"
-      "common/dlls_winex11_drv_keyboard_c.patch"
-      "common/dlls_winex11_drv_mouse_c.patch"
-      "common/dlls_winex11_drv_opengl_c.patch"
-      "common/dlls_winex11_drv_window_c.patch"
-      "common/dlls_winex11_drv_x11drv_h.patch"
-      "common/dlls_winex11_drv_x11drv_main_c.patch"
-
-      # address space patches
-      "common/loader_preloader_c.patch"
-      "x86_64/dlls_ntdll_unix_virtual_c.patch"
-
-      # syscall Patches
-      "x86_64/dlls_ntdll_unix_signal_x86_64_c.patch"
-
-      # pulse Patches
-      "common/dlls_winepulse_drv_pulse_c.patch"
-
-      # desktop patches
-      "common/programs_explorer_desktop_c.patch"
-
-      # path patches
-      "common/dlls_ntdll_unix_server_c.patch"
-
-      # winlator patches
-      "common/dlls_amd_ags_x64_unixlib_c.patch"
-
-      # shell32 file operation patches (fix crash copying to a drive root e.g. "C:")
-      "common/dlls_shell32_shlfileop_c.patch"
-
-      # shortcut patch
-      "common/programs_winemenubuilder_winemenubuilder_c.patch"
-
-      # xuser patches
-      "common/dlls_advapi32_advapi_c.patch"
-
-      # browser patches
-      "common/programs_winebrowser_makefile_in.patch"
-      "common/programs_winebrowser_main_c.patch"
-
-      # clipboard patches
-      "common/dlls_user32_clipboard_c.patch"
-      "common/dlls_win32u_clipboard_c.patch"
-    )
-
-    for patch in "${PATCHES[@]}"; do
-#      if git apply --check ./android/patches/$patch 2>/dev/null; then
-        git apply ./android/patches/$patch
-#      fi
-    done
   fi
 
   if [ "$arg" == "--build" ]

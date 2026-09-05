@@ -1,0 +1,152 @@
+diff --git a/server/inproc_sync.c b/server/inproc_sync.c
+--- a/server/inproc_sync.c
++++ b/server/inproc_sync.c
+@@ -35,7 +35,9 @@
+ #include "request.h"
+ #include "thread.h"
+ 
+-#if defined(__linux__)
++#ifdef HAVE_NTSYNC_ANDROID
++# include "../android/ntsync_android/ntsync_user.h"
++#elif defined(__linux__)
+ # include "ntsync_tmp.h"
+ #endif
+ 
+@@ -49,7 +51,14 @@
+     if (enabled != -1) return enabled;
+     enabled = 0;
+     if ((env = getenv( "PROTON_NO_NTSYNC" )) && atoi( env )) return 0;
+-#if defined(NTSYNC_IOC_EVENT_READ)
++#ifdef HAVE_NTSYNC_ANDROID
++    if (!ntsync_init( NULL ))
++    {
++        device = 0;
++        enabled = 1;
++        ntsync_sweep_dead();
++    }
++#elif defined(NTSYNC_IOC_EVENT_READ)
+     device = open( "/dev/ntsync", O_RDONLY | O_CLOEXEC );
+     enabled = device != -1;
+ #endif
+@@ -59,17 +68,26 @@
+ void close_inproc_sync( int obj )
+ {
+     if (obj == -1) return;
++#ifdef HAVE_NTSYNC_ANDROID
++    ntsync_close( obj );
++#else
+     close( obj );
++#endif
+ }
+ 
+ int create_inproc_event( int manual_reset, int signaled )
+ {
+     int obj = -1;
+     if (!use_inproc_sync()) return -1;
+-#ifdef NTSYNC_IOC_EVENT_READ
++#if defined(HAVE_NTSYNC_ANDROID) || defined(NTSYNC_IOC_EVENT_READ)
+     {
+         struct ntsync_event_args args = { .manual = manual_reset, .signaled = signaled };
++#ifdef HAVE_NTSYNC_ANDROID
++        uint32_t id;
++        if (!ntsync_create_event( &id, &args )) obj = id;
++#else
+         obj = ioctl( device, NTSYNC_IOC_CREATE_EVENT, &args );
++#endif
+     }
+ #endif
+     if (obj == -1) fatal_error( "Cannot allocate ntsync event\n" );
+@@ -80,10 +98,15 @@
+ {
+     int obj = -1;
+     if (!use_inproc_sync()) return -1;
+-#ifdef NTSYNC_IOC_EVENT_READ
++#if defined(HAVE_NTSYNC_ANDROID) || defined(NTSYNC_IOC_EVENT_READ)
+     {
+         struct ntsync_sem_args args = { .count = count, .max = max };
++#ifdef HAVE_NTSYNC_ANDROID
++        uint32_t id;
++        if (!ntsync_create_sem( &id, &args )) obj = id;
++#else
+         obj = ioctl( device, NTSYNC_IOC_CREATE_SEM, &args );
++#endif
+     }
+ #endif
+     if (obj == -1) fatal_error( "Cannot allocate ntsync semaphore\n" );
+@@ -94,10 +117,15 @@
+ {
+     int obj = -1;
+     if (!use_inproc_sync()) return -1;
+-#ifdef NTSYNC_IOC_EVENT_READ
++#if defined(HAVE_NTSYNC_ANDROID) || defined(NTSYNC_IOC_EVENT_READ)
+     {
+         struct ntsync_mutex_args args = { .owner = owner, .count = count };
++#ifdef HAVE_NTSYNC_ANDROID
++        uint32_t id;
++        if (!ntsync_create_mutex( &id, &args )) obj = id;
++#else
+         obj = ioctl( device, NTSYNC_IOC_CREATE_MUTEX, &args );
++#endif
+     }
+ #endif
+     if (obj == -1) fatal_error( "Cannot allocate ntsync mutex\n" );
+@@ -108,7 +136,9 @@
+ {
+     uint32_t prev;
+     if (!use_inproc_sync() || event == -1) return;
+-#if defined(NTSYNC_IOC_EVENT_READ)
++#ifdef HAVE_NTSYNC_ANDROID
++    ntsync_event_set( event, &prev );
++#elif defined(NTSYNC_IOC_EVENT_READ)
+     ioctl( event, NTSYNC_IOC_EVENT_SET, &prev );
+ #endif
+ }
+@@ -117,7 +147,9 @@
+ {
+     uint32_t prev;
+     if (!use_inproc_sync() || event == -1) return;
+-#if defined(NTSYNC_IOC_EVENT_READ)
++#ifdef HAVE_NTSYNC_ANDROID
++    ntsync_event_reset( event, &prev );
++#elif defined(NTSYNC_IOC_EVENT_READ)
+     ioctl( event, NTSYNC_IOC_EVENT_RESET, &prev );
+ #endif
+ }
+@@ -125,7 +157,9 @@
+ void abandon_inproc_mutex( thread_id_t tid, int mutex )
+ {
+     if (!use_inproc_sync() || mutex == -1) return;
+-#if defined(NTSYNC_IOC_EVENT_READ)
++#ifdef HAVE_NTSYNC_ANDROID
++    ntsync_mutex_kill( mutex, tid );
++#elif defined(NTSYNC_IOC_EVENT_READ)
+     ioctl( mutex, NTSYNC_IOC_MUTEX_KILL, &tid );
+ #endif
+ }
+@@ -133,7 +167,11 @@
+ DECL_HANDLER(get_linux_sync_device)
+ {
+     if (!use_inproc_sync()) set_error( STATUS_NOT_IMPLEMENTED );
++#ifdef HAVE_NTSYNC_ANDROID
++    else reply->userspace = 1;
++#else
+     else send_client_fd( current->process, device, 0 );
++#endif
+ }
+ 
+ DECL_HANDLER(get_linux_sync_obj)
+@@ -154,7 +192,14 @@
+     else
+     {
+         reply->type = type;
++#ifdef HAVE_NTSYNC_ANDROID
++        /* Keep the owning object alive for cached and outstanding waits.
++         * Process teardown closes these private handles automatically. */
++        reply->retained_handle = alloc_handle( current->process, obj, 0, 0 );
++        reply->obj = id;
++#else
+         send_client_fd( current->process, id, req->handle );
++#endif
+     }
+     release_object( obj );
+ }

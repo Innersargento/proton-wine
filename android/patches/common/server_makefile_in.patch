@@ -1,0 +1,11 @@
+diff --git a/server/Makefile.in b/server/Makefile.in
+--- a/server/Makefile.in
++++ b/server/Makefile.in
+@@ -50,6 +50,6 @@
+ 	wineserver.man.in \
+ 	winstation.c
+ 
+-UNIX_LIBS = $(LDEXECFLAGS) $(RT_LIBS) $(INOTIFY_LIBS) $(PROCSTAT_LIBS)
++UNIX_LIBS = $(LDEXECFLAGS) $(RT_LIBS) $(INOTIFY_LIBS) $(PROCSTAT_LIBS) $(NTSYNC_ANDROID_LIBS)
+ 
+ unicode_EXTRADEFS = -DBINDIR="\"${bindir}\"" -DDATADIR="\"${datadir}\""
