@@ -1457,7 +1457,7 @@ static void msg_queue_destroy( struct object *obj )
     if (queue->hooks) release_object( queue->hooks );
     if (queue->fd) release_object( queue->fd );
     if (queue->shared) free_shared_object( queue->shared );
-    if (use_inproc_sync()) close( queue->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( queue->inproc_sync );
     if (do_esync()) close( queue->esync_fd );
     if (queue->fsync_idx) fsync_free_shm_idx( queue->fsync_idx );
 }

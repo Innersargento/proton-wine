@@ -335,7 +335,7 @@ static void event_destroy( struct object *obj )
 {
     struct event *event = (struct event *)obj;
 
-    if (use_inproc_sync()) close( event->u.inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( event->u.inproc_sync );
     if (do_esync())
         close( event->esync_fd );
     if (event->fsync_idx) fsync_free_shm_idx( event->fsync_idx );
@@ -407,7 +407,7 @@ static void keyed_event_destroy( struct object *obj )
 {
     struct keyed_event *event = (struct keyed_event *)obj;
 
-    if (use_inproc_sync()) close( event->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( event->inproc_sync );
 }
 
 /* create an event */

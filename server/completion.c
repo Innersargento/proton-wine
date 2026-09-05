@@ -214,7 +214,7 @@ static void completion_destroy( struct object *obj)
     {
         free( tmp );
     }
-    if (use_inproc_sync()) close( completion->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( completion->inproc_sync );
 }
 
 static void completion_dump( struct object *obj, int verbose )

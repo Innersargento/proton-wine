@@ -881,7 +881,7 @@ static void device_manager_destroy( struct object *obj )
         release_object( irp );
     }
 
-    if (use_inproc_sync()) close( manager->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( manager->inproc_sync );
     if (do_esync())
         close( manager->esync_fd );
     if (manager->fsync_idx) fsync_free_shm_idx( manager->fsync_idx );

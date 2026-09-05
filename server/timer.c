@@ -274,7 +274,7 @@ static void timer_destroy( struct object *obj )
 
     if (timer->timeout) remove_timeout_user( timer->timeout );
     if (timer->thread) release_object( timer->thread );
-    if (use_inproc_sync()) close( timer->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( timer->inproc_sync );
     if (do_esync()) close( timer->esync_fd );
     if (timer->fsync_idx) fsync_free_shm_idx( timer->fsync_idx );
 }

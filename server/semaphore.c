@@ -199,7 +199,7 @@ static void semaphore_destroy( struct object *obj )
 {
     struct semaphore *semaphore = (struct semaphore *)obj;
 
-    if (use_inproc_sync()) close( semaphore->u.inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( semaphore->u.inproc_sync );
 }
 
 /* create a semaphore */

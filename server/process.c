@@ -467,7 +467,7 @@ static void job_destroy( struct object *obj )
         release_object( job->parent );
     }
 
-    if (use_inproc_sync()) close( job->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( job->inproc_sync );
 }
 
 static void job_dump( struct object *obj, int verbose )
@@ -844,7 +844,7 @@ static void process_destroy( struct object *obj )
     free( process->dir_cache );
     free( process->image );
 
-    if (use_inproc_sync()) close( process->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( process->inproc_sync );
     if (do_esync()) close( process->esync_fd );
     if (process->fsync_idx)
     {

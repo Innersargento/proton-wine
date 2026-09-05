@@ -832,7 +832,7 @@ static void console_destroy( struct object *obj )
     free_async_queue( &console->read_q );
     if (console->fd)
         release_object( console->fd );
-    if (use_inproc_sync()) close( console->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( console->inproc_sync );
 }
 
 static struct object *create_console_connection( struct console *console )
@@ -925,7 +925,7 @@ static void screen_buffer_destroy( struct object *obj )
     }
     if (screen_buffer->fd) release_object( screen_buffer->fd );
     free_async_queue( &screen_buffer->ioctl_q );
-    if (use_inproc_sync()) close( screen_buffer->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( screen_buffer->inproc_sync );
 }
 
 static struct object *screen_buffer_open_file( struct object *obj, unsigned int access,
@@ -972,7 +972,7 @@ static void console_server_destroy( struct object *obj )
     assert( obj->ops == &console_server_ops );
     disconnect_console_server( server );
     if (server->fd) release_object( server->fd );
-    if (use_inproc_sync()) close( server->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( server->inproc_sync );
     if (do_esync()) close( server->esync_fd );
     if (server->fsync_idx) fsync_free_shm_idx( server->fsync_idx );
 }
@@ -1577,7 +1577,7 @@ static void console_input_destroy( struct object *obj )
     assert( obj->ops == &console_input_ops );
     if (console_input->fd) release_object( console_input->fd );
     if (console_input->console) list_remove( &console_input->entry );
-    if (use_inproc_sync()) close( console_input->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( console_input->inproc_sync );
 }
 
 static void console_input_ioctl( struct fd *fd, ioctl_code_t code, struct async *async )
@@ -1658,7 +1658,7 @@ static void console_output_destroy( struct object *obj )
     assert( obj->ops == &console_output_ops );
     if (console_output->fd) release_object( console_output->fd );
     if (console_output->console) list_remove( &console_output->entry );
-    if (use_inproc_sync()) close( console_output->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( console_output->inproc_sync );
 }
 
 static void console_output_ioctl( struct fd *fd, ioctl_code_t code, struct async *async )

@@ -234,7 +234,7 @@ static void mutex_destroy( struct object *obj )
 
     if (use_inproc_sync())
     {
-        close( mutex->u.inproc.inproc_sync );
+        close_inproc_sync( mutex->u.inproc.inproc_sync );
         list_remove( &mutex->u.inproc.entry );
     }
     else

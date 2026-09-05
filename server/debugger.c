@@ -362,7 +362,7 @@ static void debug_obj_destroy( struct object *obj )
     while ((ptr = list_head( &debug_obj->event_queue )))
         unlink_event( debug_obj, LIST_ENTRY( ptr, struct debug_event, entry ));
 
-    if (use_inproc_sync()) close( debug_obj->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( debug_obj->inproc_sync );
 }
 
 struct debug_obj *get_debug_obj( struct process *process, obj_handle_t handle, unsigned int access )

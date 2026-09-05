@@ -544,7 +544,7 @@ static void destroy_thread( struct object *obj )
     if (thread->id) free_ptid( thread->id );
     if (thread->token) release_object( thread->token );
 
-    if (use_inproc_sync()) close( thread->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( thread->inproc_sync );
     if (thread->inproc_alert_event) release_object( thread->inproc_alert_event );
     if (do_esync())
         close( thread->esync_fd );

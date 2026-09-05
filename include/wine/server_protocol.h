@@ -976,6 +976,7 @@ typedef volatile struct
     struct shared_cursor cursor;
     unsigned char        keystate[256];
     unsigned __int64     monitor_serial;
+    unsigned __int64     keystate_serial;
 } desktop_shm_t;
 
 typedef volatile struct
@@ -1001,6 +1002,7 @@ typedef volatile struct
     int                  cursor_count;
     unsigned char        keystate[256];
     int                  keystate_lock;
+    unsigned __int64     keystate_serial;
 } input_shm_t;
 
 typedef volatile union
@@ -2203,9 +2205,10 @@ struct map_image_view_request
     obj_handle_t mapping;
     client_ptr_t base;
     mem_size_t   size;
+    mem_size_t   offset;
     unsigned int entry;
     unsigned short machine;
-    char __pad_38[2];
+    char __pad_46[2];
 };
 struct map_image_view_reply
 {
@@ -2496,6 +2499,8 @@ struct write_process_memory_request
 struct write_process_memory_reply
 {
     struct reply_header __header;
+    data_size_t written;
+    char __pad_12[4];
 };
 
 
@@ -7164,6 +7169,6 @@ union generic_reply
     struct get_inproc_alert_event_reply get_inproc_alert_event_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 861
+#define SERVER_PROTOCOL_VERSION 862
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */

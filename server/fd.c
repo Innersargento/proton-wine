@@ -1590,7 +1590,7 @@ static void fd_destroy( struct object *obj )
         free( fd->unix_name );
     }
 
-    if (use_inproc_sync()) close( fd->inproc_sync );
+    if (use_inproc_sync()) close_inproc_sync( fd->inproc_sync );
     if (do_esync())
         close( fd->esync_fd );
     if (fd->fsync_idx) fsync_free_shm_idx( fd->fsync_idx );

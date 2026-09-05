@@ -910,6 +910,7 @@ static void dump_map_image_view_request( const struct map_image_view_request *re
     fprintf( stderr, " mapping=%04x", req->mapping );
     dump_uint64( ", base=", &req->base );
     dump_uint64( ", size=", &req->size );
+    dump_uint64( ", offset=", &req->offset );
     fprintf( stderr, ", entry=%08x", req->entry );
     fprintf( stderr, ", machine=%04x", req->machine );
 }
@@ -1070,6 +1071,11 @@ static void dump_write_process_memory_request( const struct write_process_memory
     fprintf( stderr, " handle=%04x", req->handle );
     dump_uint64( ", addr=", &req->addr );
     dump_varargs_bytes( ", data=", cur_size );
+}
+
+static void dump_write_process_memory_reply( const struct write_process_memory_reply *req )
+{
+    fprintf( stderr, " written=%u", req->written );
 }
 
 static void dump_create_key_request( const struct create_key_request *req )
@@ -3947,7 +3953,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] =
     NULL,
     NULL,
     (dump_func)dump_read_process_memory_reply,
-    NULL,
+    (dump_func)dump_write_process_memory_reply,
     (dump_func)dump_create_key_reply,
     (dump_func)dump_open_key_reply,
     NULL,
@@ -4597,6 +4603,7 @@ static const struct
     { "OBJECT_PATH_NOT_FOUND",       STATUS_OBJECT_PATH_NOT_FOUND },
     { "OBJECT_PATH_SYNTAX_BAD",      STATUS_OBJECT_PATH_SYNTAX_BAD },
     { "OBJECT_TYPE_MISMATCH",        STATUS_OBJECT_TYPE_MISMATCH },
+    { "PARTIAL_COPY",                STATUS_PARTIAL_COPY },
     { "PENDING",                     STATUS_PENDING },
     { "PIPE_BROKEN",                 STATUS_PIPE_BROKEN },
     { "PIPE_BUSY",                   STATUS_PIPE_BUSY },
